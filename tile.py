@@ -12,5 +12,5 @@ class Tile:
         self.x, self.y = coords
         self.width, self.height = image.get_rect().size
 
-    def draw(self, surface: pygame.Surface) -> None:
-        surface.blit(self.image, (self.x, self.y))
+    def draw(self, surface: pygame.Surface, camera: pygame.Vector2) -> None:
+        surface.blit(self.image, camera + (self.x, self.y))

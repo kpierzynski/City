@@ -29,7 +29,8 @@ class Cell:
         return f"Cell({self.kind}): collapsed={self.collapsed}, options={self.options})\r\n"
 
 
-def wave_function_collapse(size: tuple[int, int], rules: list[Rule], all_options: list):
+def wave_function_collapse(size: tuple[int, int], rules: list[Rule]):
+    all_options = [rule.kind for rule in rules]
     w, h = size
     size = w * h
     grid = [Cell(None, id, all_options) for id in range(w * h)]
