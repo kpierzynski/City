@@ -26,62 +26,16 @@ def main():
 
     pygame.display.set_caption("AI CITY")
 
+    n = 10
     rules = [
-        Rule(
-            "road_4way",
-            {
-                "up": ["road_4way", "road_3way_3"],
-                "down": ["road_4way", "road_3way_3", "road_dead"],
-                "left": ["road_4way", "road_3way_3", "road_2way"],
-                "right": ["road_4way", "road_2way"],
-            },
-        ),
-        Rule(
-            "road_3way_3",
-            {
-                "up": ["road_4way", "road_3way_3"],
-                "down": ["road_4way", "road_3way_3", "road_dead"],
-                "left": ["road_empty", "road_dead"],
-                "right": ["road_4way", "road_2way"],
-            },
-        ),
-        Rule(
-            "road_2way",
-            {
-                "up": ["road_empty"],
-                "down": ["road_empty", "road_2way"],
-                "left": ["road_4way", "road_3way_3", "road_2way"],
-                "right": ["road_4way", "road_2way"],
-            },
-        ),
-        Rule(
-            "road_dead",
-            {
-                "up": ["road_4way", "road_3way_3"],
-                "down": ["road_empty", "road_2way"],
-                "left": ["road_empty", "road_dead"],
-                "right": ["road_empty", "road_dead", "road_3way_3"],
-            },
-        ),
-        Rule(
-            "road_empty",
-            {
-                "up": ["road_empty", "road_dead", "road_2way"],
-                "down": ["road_empty", "road_2way"],
-                "left": ["road_empty", "road_dead"],
-                "right": ["road_empty", "road_dead", "road_3way_3"],
-            },
-        ),
+        Rule("road_empty", [0, 0, 0, 0]),
+        Rule("road_3way", [1, 1, 0, 1]),
+        Rule("road_3way_1", [0, 1, 1, 1]),
+        Rule("road_3way_2", [1, 0, 1, 1]),
+        Rule("road_3way_3", [1, 1, 1, 0]),
     ]
-    n = 6
-    tiles = ["road_4way", "road_3way_3", "road_2way", "road_dead", "road_empty"]
-    grid = []
-    while True:
-        try:
-            grid = wave_function_collapse((n, n), rules, tiles)
-            break
-        except:
-            ...
+    options = ["road_3way_3", "road_3way_2", "road_3way_1", "road_3way", "road_empty"]
+    grid = wave_function_collapse((n, n), rules, options)
 
     roads = []
     for item in grid:
