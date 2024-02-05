@@ -42,8 +42,8 @@ class Car:
 
     def move(self):
         x, y = self.position
-        nx = 132 / 10
-        ny = 101 / 10
+        nx = 132 / 30
+        ny = 101 / 30
         if self.direction & (1 << UP):
             y -= ny / 3
             x -= nx / 2
@@ -63,4 +63,8 @@ class Car:
 
     def draw(self, screen, camera):
         x, y = self.position
-        screen.blit(self.current_image, camera + (x, y))
+        w, h = self.current_image.get_rect().size
+        screen.blit(self.current_image, camera + (x, y) - (w / 2, h / 2))
+
+        # draw small dot on x,y
+        pygame.draw.circle(screen, (255, 0, 0), camera + (x, y), 5)
