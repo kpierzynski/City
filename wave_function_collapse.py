@@ -1,5 +1,7 @@
 from random import randint as rnd
-from random import choice
+from random import choice, seed
+
+seed(3)
 
 
 class Rule:

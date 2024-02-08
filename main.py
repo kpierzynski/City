@@ -1,19 +1,202 @@
 import pygame
 from pygame import Vector2
 
-from math import sqrt
+import numpy as np
+
+from math import sqrt, fabs as abs
+from random import choice, randint as rnd
 
 from sheet import Sheet
 from tile import Tile
 from map import Map
 from road_tiles import Road
 from car import Car, UP, RIGHT, DOWN, LEFT
+from util import tile_to_pixel
 
-from wave_function_collapse import wave_function_collapse, Cell, Rule
 from config import CONFIG
 
 COLORS = CONFIG["COLORS"]
 SCREEN = CONFIG["SCREEN"]
+
+ACTION_STATES = 9
+INPUT_STATES = 29
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import os
+
+
+class Linear_QNet(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super().__init__()
+        self.linear1 = nn.Linear(input_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        x = self.linear3(x)
+        return x
+
+    def save(self, file_name="model.pth"):
+        model_folder_path = "./model"
+        if not os.path.exists(model_folder_path):
+            os.makedirs(model_folder_path)
+
+        file_name = os.path.join(model_folder_path, file_name)
+        torch.save(self.state_dict(), file_name)
+
+
+class QTrainer:
+    def __init__(self, model, lr, gamma):
+        self.lr = lr
+        self.gamma = gamma
+        self.model = model
+        self.optimizer = optim.Adam(model.parameters(), lr=self.lr)
+        self.criterion = nn.MSELoss()
+
+    def train_step(self, state, action, reward, next_state, done):
+        state = torch.tensor(state, dtype=torch.float)
+        next_state = torch.tensor(next_state, dtype=torch.float)
+        action = torch.tensor(action, dtype=torch.long)
+        reward = torch.tensor(reward, dtype=torch.float)
+        # (n, x)
+
+        if len(state.shape) == 1:
+            # (1, x)
+            state = torch.unsqueeze(state, 0)
+            next_state = torch.unsqueeze(next_state, 0)
+            action = torch.unsqueeze(action, 0)
+            reward = torch.unsqueeze(reward, 0)
+            done = (done,)
+
+        # 1: predicted Q values with current state
+        pred = self.model(state)
+
+        target = pred.clone()
+        for idx in range(len(done)):
+            Q_new = reward[idx]
+            if not done[idx]:
+                Q_new = reward[idx] + self.gamma * torch.max(
+                    self.model(next_state[idx])
+                )
+
+            target[idx][torch.argmax(action[idx]).item()] = Q_new
+
+        # 2: Q_new = r + y * max(next_predicted Q value) -> only do this if not done
+        # pred.clone()
+        # preds[argmax(action)] = Q_new
+        self.optimizer.zero_grad()
+        loss = self.criterion(target, pred)
+        loss.backward()
+
+        self.optimizer.step()
+
+
+import torch
+import random
+import numpy as np
+from collections import deque
+
+MAX_MEMORY = 100_000
+BATCH_SIZE = 1000
+LR = 0.001
+
+
+class Agent:
+
+    def __init__(self):
+        self.n_games = 0
+        self.epsilon = 0  # randomness
+        self.gamma = 0.9  # discount rate
+        self.memory = deque(maxlen=MAX_MEMORY)  # popleft()
+        self.model = Linear_QNet(INPUT_STATES, 256, ACTION_STATES)
+        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append(
+            (state, action, reward, next_state, done)
+        )  # popleft if MAX_MEMORY is reached
+
+    def train_long_memory(self):
+        if len(self.memory) > BATCH_SIZE:
+            mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
+        else:
+            mini_sample = self.memory
+
+        states, actions, rewards, next_states, dones = zip(*mini_sample)
+        self.trainer.train_step(states, actions, rewards, next_states, dones)
+        # for state, action, reward, nexrt_state, done in mini_sample:
+        #    self.trainer.train_step(state, action, reward, next_state, done)
+
+    def train_short_memory(self, state, action, reward, next_state, done):
+        self.trainer.train_step(state, action, reward, next_state, done)
+
+    def get_action(self, state):
+        # random moves: tradeoff exploration / exploitation
+        self.epsilon = 80 - self.n_games
+        self.epsilon = 20
+        final_move = [0 for _ in range(ACTION_STATES)]
+        if random.randint(0, 200) < self.epsilon:
+            move = random.randint(0, ACTION_STATES - 1)
+            final_move[move] = 1
+        else:
+            state0 = torch.tensor(state, dtype=torch.float)
+            prediction = self.model(state0)
+            move = torch.argmax(prediction).item()
+            final_move[move] = 1
+
+        return final_move
+
+
+"""
+def train():
+    plot_scores = []
+    plot_mean_scores = []
+    total_score = 0
+    record = 0
+    agent = Agent()
+    game = SnakeGameAI()
+    while True:
+        # get old state
+        state_old = agent.get_state(game)
+
+        # get move
+        final_move = agent.get_action(state_old)
+
+        # perform move and get new state
+        reward, done, score = game.play_step(final_move)
+        state_new = agent.get_state(game)
+
+        # train short memory
+        agent.train_short_memory(state_old, final_move, reward, state_new, done)
+
+        # remember
+        agent.remember(state_old, final_move, reward, state_new, done)
+
+        if done:
+            # train long memory, plot result
+            game.reset()
+            agent.n_games += 1
+            agent.train_long_memory()
+
+            if score > record:
+                record = score
+                agent.model.save()
+
+            print("Game", agent.n_games, "Score", score, "Record:", record)
+
+            plot_scores.append(score)
+            total_score += score
+            mean_score = total_score / agent.n_games
+            plot_mean_scores.append(mean_score)
+            plot(plot_scores, plot_mean_scores)
+"""
+
+agent = Agent()
 
 
 def main():
@@ -26,6 +209,7 @@ def main():
     font = pygame.font.Font(None, 36)
 
     camera = Vector2(400, 200)
+    target_coords = (100, 100)
 
     # Set the height and width of the screen
     size = [SCREEN["WIDTH"], SCREEN["HEIGHT"]]
@@ -33,8 +217,36 @@ def main():
 
     pygame.display.set_caption("AI CITY")
 
-    map = Map((4, 4))
-    car = Car((400, 200))
+    timer_interval = 5000
+    timer_event = pygame.USEREVENT + 1
+    pygame.time.set_timer(timer_event, timer_interval)
+
+    timer_1s = 100
+    timer_1s_event = pygame.USEREVENT + 2
+    pygame.time.set_timer(timer_1s_event, timer_1s)
+
+    map = Map((7, 7))
+    car = Car((0, 150))
+
+    possible_actions = [
+        (1 << UP),
+        (1 << RIGHT),
+        (1 << DOWN),
+        (1 << LEFT),
+        (1 << UP) | (1 << RIGHT),
+        (1 << RIGHT) | (1 << DOWN),
+        (1 << DOWN) | (1 << LEFT),
+        (1 << LEFT) | (1 << UP),
+        0,
+    ]
+
+    def distance(v1, v2):
+        x1, y1 = v1
+        x2, y2 = v2
+
+        return sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+    time_elapsed = 0
 
     # PyGame main loop
     while True:
@@ -42,6 +254,33 @@ def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = event.pos
+
+                x, y = mouse_pos
+                x, y = x - camera.x, y - camera.y
+
+                if event.button == pygame.BUTTON_RIGHT:
+                    car.position = (x, y)
+                else:
+                    target_coords = Vector2(x, y)
+
+            if event.type == timer_event:
+                agent.n_games += 1
+                while True:
+                    x, y = tile_to_pixel((rnd(1, 4), rnd(1, 4)))
+                    if map.get_tile(x, y).kind == "road_empty":
+                        continue
+                    target_coords = (x, y)
+                    break
+
+                x, y = tile_to_pixel((rnd(2, 3), rnd(2, 3)))
+                car.position = Vector2(x, y)
+                time_elapsed = 0
+
+            if event.type == timer_1s_event:
+                time_elapsed += timer_1s / 1000
 
         direction = 0
         pressed = pygame.key.get_pressed()
@@ -61,14 +300,110 @@ def main():
             direction |= 1 << DOWN
         if pressed[pygame.K_a]:
             direction |= 1 << LEFT
+        if pressed[pygame.K_u]:
+            agent.model.save()
+            print("Model saved")
 
         if direction:
             car.set_direction(direction)
             car.move()
 
-        x, y = car.position
-        car_on_tile = map.get_tile(x, y)
-        x, y = car_on_tile.x, car_on_tile.y
+        state = [
+            (
+                1
+                if car.position[0] < target_coords[0]
+                and car.position[1] < target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] > target_coords[0]
+                and car.position[1] < target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] > target_coords[0]
+                and car.position[1] > target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] < target_coords[0]
+                and car.position[1] > target_coords[1]
+                else 0
+            ),
+            distance(car.position, target_coords) / (132 * 5),
+        ] + [1 if x else 0 for x in car.get_grid()]
+
+        move = agent.get_action(state)
+        direction = possible_actions[np.argmax(move)]
+        hit = False
+        if direction:
+            car.set_direction(direction)
+            hit = car.move()
+
+        new_state = [
+            (
+                1
+                if car.position[0] < target_coords[0]
+                and car.position[1] < target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] > target_coords[0]
+                and car.position[1] < target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] > target_coords[0]
+                and car.position[1] > target_coords[1]
+                else 0
+            ),
+            (
+                1
+                if car.position[0] < target_coords[0]
+                and car.position[1] > target_coords[1]
+                else 0
+            ),
+            distance(car.position, target_coords) / (132 * 5),
+        ] + [1 if x else 0 for x in car.get_grid()]
+
+        reward = (
+            (timer_interval / 1000)
+            if map.is_on_road(car.position)
+            else -2 * (timer_interval / 1000)
+        )
+        if hit:
+            reward = -10
+
+        reward -= time_elapsed
+
+        done = False
+        if distance(car.position, target_coords) < 20:
+            done = True
+            reward = 50
+
+        agent.train_short_memory(state, move, reward, new_state, done)
+        agent.remember(state, move, reward, new_state, done)
+
+        if done:
+            agent.n_games += 1
+            agent.train_long_memory()
+
+            while True:
+                x, y = tile_to_pixel((rnd(1, 4), rnd(1, 4)))
+                if map.get_tile(x, y).kind == "road_empty":
+                    continue
+                target_coords = (x, y)
+                break
+
+            x, y = tile_to_pixel((rnd(2, 3), rnd(2, 3)))
+            car.position = Vector2(x, y)
+            time_elapsed = 0
+            pygame.time.set_timer(timer_event, timer_interval)
 
         map.update()
         car.update()
@@ -76,20 +411,28 @@ def main():
         # Set the screen background
         screen.fill(COLORS["SKYBLUE"])
 
-        map.draw(screen, camera, car_on_tile)
+        map.draw(screen, camera)
         car.draw(screen, camera)
 
-        # draw text
         text = font.render(
-            f"Car: ({car.position[0]:.2f},{car.position[1]:.2f}), on: {car_on_tile.kind}",
+            f"Game: {agent.n_games}, Car: ({car.position[0]:.2f},{car.position[1]:.2f}), Reward: {reward:.2f}",
             True,
             COLORS["BLACK"],
         )
         screen.blit(text, (10, 10))
 
-        # Flip the display
+        # draw dot in target_coords
+        pygame.draw.circle(screen, (255, 221, 0), camera + target_coords, 5)
+
+        for pos in car.get_grid():
+            color = (0, 255, 127)
+            if not map.is_on_road(pos):
+                color = (255, 0, 0)
+            pygame.draw.circle(screen, color, camera + pos, 1)
+
         pygame.display.flip()
-        clock.tick(CONFIG["SCREEN"]["FPS"])
+
+        # clock.tick(CONFIG["SCREEN"]["FPS"])
 
 
 if __name__ == "__main__":

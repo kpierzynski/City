@@ -3,9 +3,9 @@ CONFIG = {
         "SIZE": 50,
     },
     "SCREEN": {
-        "WIDTH": 1000,
+        "WIDTH": 1200,
         "HEIGHT": 800,
-        "FPS": 60,
+        "FPS": 120,
     },
     "COLORS": {
         "BLACK": (0, 0, 0, 0),

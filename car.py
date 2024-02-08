@@ -2,6 +2,8 @@ import pygame
 
 from random import randint as rnd
 
+from util import pixel_to_tile
+
 UP = 0
 RIGHT = 1
 DOWN = 2
@@ -40,10 +42,48 @@ class Car:
 
     def update(self): ...
 
-    def move(self):
+    def get_grid(self) -> list[tuple[int, int]]:
         x, y = self.position
-        nx = 132 / 30
-        ny = 101 / 30
+
+        nx = 132 / 2 / 2
+        ny = 101 / 3 / 2
+
+        grid = [
+            (x + nx, y - ny),
+            (x + nx, y + ny),
+            (x - nx, y + ny),
+            (x - nx, y - ny),
+            (x + nx, y),
+            (x, y + ny),
+            (x - nx, y),
+            (x, y - ny),
+            (x + 2 * nx, y - 2 * ny),
+            (x + 2 * nx, y + 2 * ny),
+            (x - 2 * nx, y + 2 * ny),
+            (x - 2 * nx, y - 2 * ny),
+            (x + 2 * nx, y),
+            (x, y + 2 * ny),
+            (x - 2 * nx, y),
+            (x, y - 2 * ny),
+            (x + 3 * nx, y - 3 * ny),
+            (x + 3 * nx, y + 3 * ny),
+            (x - 3 * nx, y + 3 * ny),
+            (x - 3 * nx, y - 3 * ny),
+            (x + 3 * nx, y),
+            (x, y + 3 * ny),
+            (x - 3 * nx, y),
+            (x, y - 3 * ny),
+        ]
+
+        return grid
+
+    def move(self):
+        if not self.direction:
+            return False
+
+        x, y = self.position
+        nx = 132 / 10
+        ny = 101 / 10
         if self.direction & (1 << UP):
             y -= ny / 3
             x -= nx / 2
@@ -56,7 +96,17 @@ class Car:
         if self.direction & (1 << LEFT):
             x -= nx / 2
             y += ny / 3
+
+        tx, ty = pixel_to_tile((x, y))
+
+        if tx >= 5 or ty >= 5:
+            return True
+
+        if tx < 0 or ty < 0:
+            return True
+
         self.position = (x, y)
+        return False
 
     def set_direction(self, direction):
         self.direction = direction
@@ -65,6 +115,3 @@ class Car:
         x, y = self.position
         w, h = self.current_image.get_rect().size
         screen.blit(self.current_image, camera + (x, y) - (w / 2, h / 2))
-
-        # draw small dot on x,y
-        pygame.draw.circle(screen, (255, 0, 0), camera + (x, y), 5)
