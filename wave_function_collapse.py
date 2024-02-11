@@ -1,7 +1,7 @@
 from random import randint as rnd
 from random import choice, seed
 
-seed(3)
+seed(13)
 
 
 class Rule:

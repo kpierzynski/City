@@ -18,8 +18,8 @@ from config import CONFIG
 COLORS = CONFIG["COLORS"]
 SCREEN = CONFIG["SCREEN"]
 
-ACTION_STATES = 9
-INPUT_STATES = 29
+ACTION_STATES = 5
+INPUT_STATES = 8
 
 import torch
 import torch.nn as nn
@@ -32,13 +32,13 @@ class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
         self.linear1 = nn.Linear(input_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, output_size)
+        self.linear2 = nn.Linear(hidden_size, output_size)
+
+        self.load()
 
     def forward(self, x):
         x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = self.linear3(x)
+        x = self.linear2(x)
         return x
 
     def save(self, file_name="model.pth"):
@@ -48,6 +48,14 @@ class Linear_QNet(nn.Module):
 
         file_name = os.path.join(model_folder_path, file_name)
         torch.save(self.state_dict(), file_name)
+
+    def load(self, file_name="model.pth"):
+        model_folder_path = "./model"
+        file_path = os.path.join(model_folder_path, file_name)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Model file '{file_name}' not found.")
+        
+        self.load_state_dict(torch.load(file_path))
 
 
 class QTrainer:
@@ -138,7 +146,7 @@ class Agent:
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
         self.epsilon = 80 - self.n_games
-        self.epsilon = 20
+        self.epsilon = 10
         final_move = [0 for _ in range(ACTION_STATES)]
         if random.randint(0, 200) < self.epsilon:
             move = random.randint(0, ACTION_STATES - 1)
@@ -217,7 +225,7 @@ def main():
 
     pygame.display.set_caption("AI CITY")
 
-    timer_interval = 5000
+    timer_interval = 7500
     timer_event = pygame.USEREVENT + 1
     pygame.time.set_timer(timer_event, timer_interval)
 
@@ -225,20 +233,39 @@ def main():
     timer_1s_event = pygame.USEREVENT + 2
     pygame.time.set_timer(timer_1s_event, timer_1s)
 
-    map = Map((7, 7))
+    map = Map((4, 4))
     car = Car((0, 150))
 
     possible_actions = [
         (1 << UP),
         (1 << RIGHT),
-        (1 << DOWN),
         (1 << LEFT),
+        (1 << DOWN),
+        0,
         (1 << UP) | (1 << RIGHT),
+        (1 << LEFT) | (1 << UP),
         (1 << RIGHT) | (1 << DOWN),
         (1 << DOWN) | (1 << LEFT),
-        (1 << LEFT) | (1 << UP),
-        0,
     ]
+
+    def cast_ray(car_pos, angle, max_distance):
+        import math
+        x, y = car_pos
+        dx = pygame.math.Vector2(math.cos(angle), -math.sin(angle)).normalize()
+        end_point = (int(x + dx.x), int(y + dx.y))
+
+        inverse = map.is_on_road(car_pos)
+
+        while pygame.math.Vector2(car_pos).distance_to(end_point) <= max_distance:
+            if inverse:
+                if not map.is_on_road(end_point):
+                    return end_point
+            else:
+                if map.is_on_road(end_point):
+                    return end_point
+            end_point += dx
+
+        return end_point
 
     def distance(v1, v2):
         x1, y1 = v1
@@ -247,6 +274,7 @@ def main():
         return sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
     time_elapsed = 0
+    import math
 
     # PyGame main loop
     while True:
@@ -269,7 +297,7 @@ def main():
             if event.type == timer_event:
                 agent.n_games += 1
                 while True:
-                    x, y = tile_to_pixel((rnd(1, 4), rnd(1, 4)))
+                    x, y = tile_to_pixel((rnd(1, 3), rnd(1, 3)))
                     if map.get_tile(x, y).kind == "road_empty":
                         continue
                     target_coords = (x, y)
@@ -308,6 +336,36 @@ def main():
             car.set_direction(direction)
             car.move()
 
+
+        rays = {
+            "left": [ (0,0), 0 ],
+            "forward": [ (0,0), 0 ],
+            "right": [ (0,0), 0 ]
+        }
+
+        for key,value in rays.items():
+            
+            if car.direction == (1<<UP):
+                angle = math.atan2(101/3, -132/2)
+            if car.direction == (1<<LEFT):
+                angle = math.atan2(-101/3, -132/2)
+            if car.direction == (1<<RIGHT):
+                angle = math.atan2(101/3, 132/2)
+            if car.direction == (1<<DOWN):
+                angle = math.atan2(-101/3, 132/2)
+
+            if key == "left":
+                angle += 2*math.atan2(101/3, 132/2) - math.pi
+            if key == "right":
+                angle += 2*math.atan2(101/3, 132/2)
+
+            if car.direction == (1<<LEFT) or car.direction == (1<<RIGHT):
+                if key != "forward":
+                    angle += 5*math.atan2(101/3, 132/2)/2
+
+            value[0] = cast_ray(car.position, angle, 132)
+            value[1] = distance(car.position, value[0])
+
         state = [
             (
                 1
@@ -333,8 +391,11 @@ def main():
                 and car.position[1] > target_coords[1]
                 else 0
             ),
-            distance(car.position, target_coords) / (132 * 5),
-        ] + [1 if x else 0 for x in car.get_grid()]
+            distance(car.position, target_coords) / (132 * 6),
+            rays['left'][1] / 132,
+            rays['forward'][1] / 132,
+            rays['right'][1] / 132
+        ]
 
         move = agent.get_action(state)
         direction = possible_actions[np.argmax(move)]
@@ -342,6 +403,29 @@ def main():
         if direction:
             car.set_direction(direction)
             hit = car.move()
+
+        for key,value in rays.items():
+            
+            if car.direction == (1<<UP):
+                angle = math.atan2(101/3, -132/2)
+            if car.direction == (1<<LEFT):
+                angle = math.atan2(-101/3, -132/2)
+            if car.direction == (1<<RIGHT):
+                angle = math.atan2(101/3, 132/2)
+            if car.direction == (1<<DOWN):
+                angle = math.atan2(-101/3, 132/2)
+
+            if key == "left":
+                angle += 2*math.atan2(101/3, 132/2) - math.pi
+            if key == "right":
+                angle += 2*math.atan2(101/3, 132/2)
+
+            if car.direction == (1<<LEFT) or car.direction == (1<<RIGHT):
+                if key != "forward":
+                    angle += 5*math.atan2(101/3, 132/2)/2
+
+            value[0] = cast_ray(car.position, angle, 132)
+            value[1] = distance(car.position, value[0])
 
         new_state = [
             (
@@ -368,13 +452,16 @@ def main():
                 and car.position[1] > target_coords[1]
                 else 0
             ),
-            distance(car.position, target_coords) / (132 * 5),
-        ] + [1 if x else 0 for x in car.get_grid()]
+            distance(car.position, target_coords) / (132 * 6),
+            rays['left'][1] / 132,
+            rays['forward'][1] / 132,
+            rays['right'][1] / 132
+        ]
 
         reward = (
             (timer_interval / 1000)
             if map.is_on_road(car.position)
-            else -2 * (timer_interval / 1000)
+            else -3*(timer_interval / 1000)
         )
         if hit:
             reward = -10
@@ -394,7 +481,7 @@ def main():
             agent.train_long_memory()
 
             while True:
-                x, y = tile_to_pixel((rnd(1, 4), rnd(1, 4)))
+                x, y = tile_to_pixel((rnd(1, 3), rnd(1, 3)))
                 if map.get_tile(x, y).kind == "road_empty":
                     continue
                 target_coords = (x, y)
@@ -405,6 +492,9 @@ def main():
             time_elapsed = 0
             pygame.time.set_timer(timer_event, timer_interval)
 
+
+
+
         map.update()
         car.update()
 
@@ -413,6 +503,12 @@ def main():
 
         map.draw(screen, camera)
         car.draw(screen, camera)
+
+        colors = [(255,0,0), (0,255,0), (0,0,255)]
+        color_i = 0
+        for key, (ray_end, ray_dist) in rays.items():
+            pygame.draw.line(screen, colors[color_i], camera + car.position, camera + ray_end)
+            color_i += 1
 
         text = font.render(
             f"Game: {agent.n_games}, Car: ({car.position[0]:.2f},{car.position[1]:.2f}), Reward: {reward:.2f}",

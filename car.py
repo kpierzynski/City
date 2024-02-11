@@ -1,14 +1,15 @@
 import pygame
 
+
 from random import randint as rnd
 
 from util import pixel_to_tile
+
 
 UP = 0
 RIGHT = 1
 DOWN = 2
 LEFT = 3
-
 # car_2 -> up
 # car_4 -> right
 # car_9 -> down
@@ -99,7 +100,7 @@ class Car:
 
         tx, ty = pixel_to_tile((x, y))
 
-        if tx >= 5 or ty >= 5:
+        if tx >= 4 or ty >= 4:
             return True
 
         if tx < 0 or ty < 0:
