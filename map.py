@@ -2,7 +2,7 @@ import pygame
 
 from math import fabs as abs
 
-from road_tiles import Road
+from road_tiles import Road, sheet
 from util import pixel_to_tile, tile_to_pixel
 from wave_function_collapse import wave_function_collapse, Cell, Rule
 
@@ -10,24 +10,7 @@ from wave_function_collapse import wave_function_collapse, Cell, Rule
 class Map:
     def __init__(self, size: tuple[int, int]) -> None:
         self.size = size
-        self.rules = [
-            Rule("road_empty", [0, 0, 0, 0]),
-            Rule("road_3way", [1, 0, 1, 1]),
-            Rule("road_3way_1", [1, 1, 1, 0]),
-            Rule("road_3way_2", [0, 1, 1, 1]),
-            Rule("road_3way_3", [1, 1, 0, 1]),
-            Rule("road_4way", [1, 1, 1, 1]),
-            # Rule("road_dead", [1, 0, 0, 0]),
-            # Rule("road_dead_1", [0, 1, 0, 0]),
-            # Rule("road_dead_2", [0, 0, 0, 1]),
-            # Rule("road_dead_3", [0, 0, 1, 0]),
-            Rule("road_2way", [1, 0, 1, 0]),
-            Rule("road_2way_1", [0, 1, 0, 1]),
-            Rule("road_turn", [0, 1, 1, 0]),
-            Rule("road_turn_1", [1, 1, 0, 0]),
-            Rule("road_turn_2", [0, 0, 1, 1]),
-            Rule("road_turn_3", [1, 0, 0, 1]),
-        ]
+        self.rules = sheet.get_rules()
         self.grid = wave_function_collapse(size, self.rules)
 
         self.roads = []

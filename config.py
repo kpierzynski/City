@@ -5,7 +5,7 @@ CONFIG = {
     "SCREEN": {
         "WIDTH": 1200,
         "HEIGHT": 800,
-        "FPS": 600,
+        "FPS": 2000,
     },
     "COLORS": {
         "BLACK": (0, 0, 0, 0),

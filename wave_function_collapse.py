@@ -1,7 +1,7 @@
 from random import randint as rnd
 from random import choice, seed
 
-seed(13)
+# seed(13)
 
 
 class Rule:
@@ -99,7 +99,6 @@ if __name__ == "__main__":
         Rule("left", [1, 0, 1, 1]),
         Rule("empty", [0, 0, 0, 0]),
     ]
-    options = ["up", "right", "down", "left", "empty"]
-    grid = wave_function_collapse((3, 3), rules, options)
+    grid = wave_function_collapse((3, 3), rules)
 
     print(grid)

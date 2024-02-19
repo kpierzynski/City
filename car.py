@@ -59,6 +59,26 @@ class Car:
     def current_image(self):
         return self.sprites[self.direction]
 
+    def cast_ray(self, angle, max_distance, check_road):
+        x, y = self.position
+
+        is_car_on_road = check_road(self.position)
+
+        d = pygame.math.Vector2(math.cos(angle), -math.sin(angle)).normalize()
+        end = (x, y)
+
+        while pygame.math.Vector2((x, y)).distance_to(end) <= max_distance:
+            if is_car_on_road:
+                if not check_road(end):
+                    return end
+            else:
+                if check_road(end):
+                    return end
+
+            end += d
+
+        return end
+
     def update(self, dt):
         x, y = self.position
         nx = 132 * self.speed * dt
@@ -106,7 +126,7 @@ class Car:
 
     def brake(self, dt):
         if self.speed > 0:
-            self.speed -= 2 * self.acceleration * dt
+            self.speed -= 1 / 2 * self.acceleration * dt
 
             if self.speed < 0:
                 self.speed = 0

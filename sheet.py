@@ -1,31 +1,42 @@
 import pygame
 
+from wave_function_collapse import Rule
 from PIL import Image
 from pathlib import Path
+
+from random import choice
 
 
 class Sheet:
     def __init__(self, path: str) -> None:
         self.tiles = {}
-        self.masks = {}
 
-        for file in Path(path).iterdir():
-            if file.is_file() and file.suffix == ".png":
-                if "mask" in file.stem:
-                    img = Image.open(file).convert("L")
-                    self.masks[file.stem[:-5]] = img
-                else:
+        for element in Path(path).iterdir():
+            if element.is_file():
+                continue
+
+            if element.stem not in self.tiles:
+                self.tiles[element.stem] = []
+
+            for file in element.iterdir():
+                if file.is_file() and file.suffix == ".png":
                     img = pygame.image.load(file)
-                    self.tiles[file.stem] = img
+                    self.tiles[element.stem].append(img)
 
     def get_image(self, kind: str) -> pygame.Surface:
-        return self.tiles[kind]
+        return choice(self.tiles[kind])
 
-    def get_mask(self, kind: str) -> Image.Image:
-        return self.masks[kind]
+    def get_rules(self) -> list[str]:
+        keys = self.tiles.keys()
+
+        rules = []
+
+        for key in keys:
+            rules.append(Rule(key, [num for num in key]))
+
+        return rules
 
 
 if __name__ == "__main__":
     sheet = Sheet("assets/roads")
     print(sheet.tiles)
-    print(sheet.tiles["road_4way"].get_rect().size)

@@ -11,29 +11,25 @@ sheet = Sheet("assets/roads")
 class Road(Tile):
     def __init__(self, kind, coords: tuple[int, int]) -> None:
         self.image = sheet.get_image(kind)
-        self.mask = sheet.get_mask(kind)
         self.kind = kind
 
         self.x, self.y = tile_to_pixel(coords)
 
         super().__init__(self.image, (self.x, self.y))
 
-    def _is_on_road(self, coords: tuple[int, int]) -> bool:
+    def _is_dark_color(self, rgb):
+        brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
+
+        return brightness < 128
+
+    def is_on_road(self, coords: tuple[int, int]) -> bool:
         try:
             pixel = self.image.get_at(coords)
         except IndexError:
             return False
 
-        if pixel[0] == pixel[1] == pixel[2] and 80 < pixel[0] < 120:
+        if self._is_dark_color(pixel):
             return True
-        return False
-
-    def is_on_road(self, coords: tuple[int, int]) -> bool:
-        pixel = self.mask.getpixel(coords)
-
-        if pixel < 128:
-            return True
-
         return False
 
 
